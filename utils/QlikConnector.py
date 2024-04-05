@@ -7,7 +7,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 
 class QlikConnector:
-    def __init__(self, host: Path, apps_path: Path) -> None:
+    def __init__(self, host: str, apps_path: Path) -> None:
         self.__host = host
         self.__apps_path = apps_path
         self.ws = None
@@ -18,7 +18,7 @@ class QlikConnector:
             self.__conect_engine()
             self.__open_app(app)
             self.__check_app_status()
-            self.__start_reload()
+            self.__reload()
             self.__save_app()
 
     def __conect_engine(self):
@@ -40,7 +40,7 @@ class QlikConnector:
                 "id": 0,
                 "method": "OpenDoc",
                 "handle": -1,
-                "params": [app, ""]
+                "params": [str(app), ""]
             }
             self.ws.send(json.dumps(request))
             response =  json.loads(self.ws.recv())
@@ -84,7 +84,7 @@ class QlikConnector:
             self.ws.close()
             raise
 
-    def __start_reload(self):
+    def __reload(self):
         logging.info("Starting reload...")
         try:
             request = {
@@ -103,24 +103,28 @@ class QlikConnector:
                 self.ws.close()
                 raise Exception(errorMessage)
 
-            # Get reload status
-            status = response["result"]["qResult"]["qSuccess"]
-            if status:
+        except Exception as e:
+            logging.error("Error while starting reload.")
+            logging.error(e)
+            self.ws.close()
+            raise
+
+        else:
+            self.__get_reload_status(response)
+    
+    def __get_reload_status(self, response):
+            try:
+                status = response["result"]["qResult"]["qSuccess"]
                 logging.info("Reload completed")
-            else:
+            except:
                 logging.error("Error. Reload failed.")
                 try:
                     logFile = response["result"]["qResult"]["qScriptLogFile"]
                     logging.error(f"See log at {logFile}")
                 except KeyError:
                     logging.error("No log was generated")
+                    self.ws.close()
                 raise Exception("Reload failed")
-
-        except Exception as e:
-            logging.error("Error while starting reload.")
-            logging.error(e)
-            self.ws.close()
-            raise
 
     def __save_app(self):
         logging.info("Saving app...")
