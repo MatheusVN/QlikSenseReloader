@@ -12,14 +12,16 @@ class QlikConnector:
         self.__apps_path = apps_path
         self.ws = None
         self.__apps = self.__find_apps()
+        self.error = False
 
-    def open_apps(self):
+    def execute_qlik(self):
         for app in self.__apps:
             self.__conect_engine()
             self.__open_app(app)
             self.__check_app_status()
             self.__reload()
             self.__save_app()
+            self.ws.close()
 
     def __conect_engine(self):
         logging.info("Connecting to Qlik Sense engine...")
@@ -33,31 +35,33 @@ class QlikConnector:
             exit(1)
     
     def __open_app(self, app: Path):
-        logging.info(f"Opening app {app.name}...")
+        logging.info(f'Openning app: {app.name}')
         try:
             request = {
                 "jsonrpc": "2.0",
                 "id": 0,
                 "method": "OpenDoc",
                 "handle": -1,
-                "params": [str(app), ""]
+                "params": [
+                    str(app),
+                    ""
+                ]
             }
-            self.ws.send(json.dumps(request))
-            response =  json.loads(self.ws.recv())
 
-            if 'error' in response:
+            self.ws.send(json.dumps(request))
+            response =  self.ws.recv()
+            response =  json.loads(self.ws.recv())
+            try:
                 errorMessage = response["error"]["message"]
                 logging.error(f"Error: {errorMessage}")
                 self.ws.close()
                 raise Exception(errorMessage)
-        
+            except:
+                logging.info(f'App {app.name} opened successfully!')
         except Exception as e:
             logging.error(f'Error while opening the app: {e}')
             self.ws.close()
             raise
-
-        else:
-            logging.info(f'App {app.name} opened successfully!')
         
     def __check_app_status(self):
         logging.info("Checking app status...")
@@ -71,16 +75,16 @@ class QlikConnector:
             }
 
             self.ws.send(json.dumps(request))
-            response = json.loads(self.ws.recv())
-            if "error" in response:
+            response =  json.loads(self.ws.recv())
+            try:
                 errorMessage = response["error"]["message"]
                 logging.error(f"Error: {errorMessage}")
                 self.ws.close()
                 raise Exception(errorMessage)
-
+            except:
+                logging.info('Checked app status!')
         except Exception as e:
-            logging.error("Error while checking app status.")
-            logging.error(e)
+            logging.error(f"Error while checking app status: {e}.")
             self.ws.close()
             raise
 
@@ -96,35 +100,31 @@ class QlikConnector:
             }
 
             self.ws.send(json.dumps(request))
-            response = json.loads(self.ws.recv())
-            if "error" in response:
+            response =  json.loads(self.ws.recv())
+            try:
                 errorMessage = response["error"]["message"]
                 logging.error(f"Error: {errorMessage}")
                 self.ws.close()
                 raise Exception(errorMessage)
-
+            except:
+                pass
         except Exception as e:
-            logging.error("Error while starting reload.")
-            logging.error(e)
+            logging.error(f"Error while starting reload: {e}.")
             self.ws.close()
             raise
 
-        else:
-            self.__get_reload_status(response)
-    
-    def __get_reload_status(self, response):
+        try:
+            status = response["result"]["qResult"]["qSuccess"]
+            logging.info("Reload completed!")
+        except:
+            logging.error("Reload failed.")
             try:
-                status = response["result"]["qResult"]["qSuccess"]
-                logging.info("Reload completed")
+                logFile = response["result"]["qResult"]["qScriptLogFile"]
+                logging.info(f"See log at: {logFile}")
             except:
-                logging.error("Error. Reload failed.")
-                try:
-                    logFile = response["result"]["qResult"]["qScriptLogFile"]
-                    logging.error(f"See log at {logFile}")
-                except KeyError:
-                    logging.error("No log was generated")
-                    self.ws.close()
-                raise Exception("Reload failed")
+                logging.info("No log was generated.")
+            self.ws.close()
+            raise
 
     def __save_app(self):
         logging.info("Saving app...")
@@ -138,16 +138,16 @@ class QlikConnector:
             }
 
             self.ws.send(json.dumps(request))
-            response = json.loads(self.ws.recv())
-            if "error" in response:
+            response =  json.loads(self.ws.recv())
+            try:
                 errorMessage = response["error"]["message"]
                 logging.error(f"Error: {errorMessage}")
                 self.ws.close()
                 raise Exception(errorMessage)
-
+            except:
+                logging.info('App saved!')
         except Exception as e:
-            logging.error("Error while saving the app.")
-            logging.error(e)
+            logging.error(f"Error while saving the app: {e}.")
             self.ws.close()
             raise
 
