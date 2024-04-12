@@ -1,40 +1,45 @@
-from websocket import create_connection
+from websocket import create_connection, WebSocket
 from pathlib import Path
 import json
 import logging
+from concurrent.futures import ThreadPoolExecutor
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
 class QlikConnector:
-    def __init__(self, host: str, apps_path: Path) -> None:
+    def __init__(self, host: str, apps_path: Path, cores: int) -> None:
         self.__host = host
         self.__apps_path = apps_path
-        self.ws = None
         self.__apps = self.__find_apps()
-        self.error = False
+        self.__max_workers = cores
 
     def execute_qlik(self):
-        for app in self.__apps:
-            self.__conect_engine()
-            self.__open_app(app)
-            self.__check_app_status()
-            self.__reload()
-            self.__save_app()
-            self.ws.close()
+        with ThreadPoolExecutor(max_workers=self.__max_workers) as executor:
+            executor.map(self.__process_app, self.__apps)
 
-    def __conect_engine(self):
+    def __process_app(self, app: Path):
+        ws = self.__conect_engine()
+        if ws:
+            self.__open_app(ws, app)
+            self.__check_app_status(ws)
+            self.__reload(ws)
+            self.__save_app(ws)
+            ws.close()
+
+    def __conect_engine(self) -> WebSocket:
         logging.info("Connecting to Qlik Sense engine...")
         try:
-            self.ws = create_connection(self.__host)
+            ws = create_connection(self.__host)
             logging.info("Connection established successfully!")
+            return ws
         except Exception as e:
             logging.error("Error while connecting to the Qlik Sense engine. Make sure the Qlik Sense Desktop is open and logged in.")
             logging.error('Error details: %s', e)
             input('Press any key to close the window...')
             exit(1)
     
-    def __open_app(self, app: Path):
+    def __open_app(self, ws: WebSocket, app: Path):
         logging.info(f'Openning app: {app.name}')
         try:
             request = {
@@ -48,22 +53,22 @@ class QlikConnector:
                 ]
             }
 
-            self.ws.send(json.dumps(request))
-            response =  self.ws.recv()
-            response =  json.loads(self.ws.recv())
+            ws.send(json.dumps(request))
+            response =  ws.recv()
+            response =  json.loads(ws.recv())
             try:
                 errorMessage = response["error"]["message"]
                 logging.error(f"Error: {errorMessage}")
-                self.ws.close()
+                ws.close()
                 raise Exception(errorMessage)
             except:
                 logging.info(f'App {app.name} opened successfully!')
         except Exception as e:
             logging.error(f'Error while opening the app: {e}')
-            self.ws.close()
+            ws.close()
             raise
         
-    def __check_app_status(self):
+    def __check_app_status(self, ws: WebSocket):
         logging.info("Checking app status...")
         try:
             request = {
@@ -74,21 +79,21 @@ class QlikConnector:
                 "params": []
             }
 
-            self.ws.send(json.dumps(request))
-            response =  json.loads(self.ws.recv())
+            ws.send(json.dumps(request))
+            response =  json.loads(ws.recv())
             try:
                 errorMessage = response["error"]["message"]
                 logging.error(f"Error: {errorMessage}")
-                self.ws.close()
+                ws.close()
                 raise Exception(errorMessage)
             except:
                 logging.info('Checked app status!')
         except Exception as e:
             logging.error(f"Error while checking app status: {e}.")
-            self.ws.close()
+            ws.close()
             raise
 
-    def __reload(self):
+    def __reload(self, ws: WebSocket):
         logging.info("Starting reload...")
         try:
             request = {
@@ -99,18 +104,18 @@ class QlikConnector:
                 "jsonrpc": "2.0"
             }
 
-            self.ws.send(json.dumps(request))
-            response =  json.loads(self.ws.recv())
+            ws.send(json.dumps(request))
+            response =  json.loads(ws.recv())
             try:
                 errorMessage = response["error"]["message"]
                 logging.error(f"Error: {errorMessage}")
-                self.ws.close()
+                ws.close()
                 raise Exception(errorMessage)
             except:
                 pass
         except Exception as e:
             logging.error(f"Error while starting reload: {e}.")
-            self.ws.close()
+            ws.close()
             raise
 
         try:
@@ -123,10 +128,10 @@ class QlikConnector:
                 logging.info(f"See log at: {logFile}")
             except:
                 logging.info("No log was generated.")
-            self.ws.close()
+            ws.close()
             raise
 
-    def __save_app(self):
+    def __save_app(self, ws: WebSocket):
         logging.info("Saving app...")
         try:
             request = {
@@ -137,18 +142,18 @@ class QlikConnector:
                 "params": []
             }
 
-            self.ws.send(json.dumps(request))
-            response =  json.loads(self.ws.recv())
+            ws.send(json.dumps(request))
+            response =  json.loads(ws.recv())
             try:
                 errorMessage = response["error"]["message"]
                 logging.error(f"Error: {errorMessage}")
-                self.ws.close()
+                ws.close()
                 raise Exception(errorMessage)
             except:
                 logging.info('App saved!')
         except Exception as e:
             logging.error(f"Error while saving the app: {e}.")
-            self.ws.close()
+            ws.close()
             raise
 
     def __find_apps(self) -> list[Path]:
