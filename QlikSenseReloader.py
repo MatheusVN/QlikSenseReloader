@@ -8,7 +8,7 @@ if __name__ == "__main__":
 	logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 	try:
 		start_time = time.time()
-		qliker = QlikConnector(HOST, APPS_PATH)
+		qliker = QlikConnector(HOST, APPS_PATH, CPU_CORES)
 		db = LogDB(DB_PATH, CPU_CORES)
 		qliker.execute_qlik()
 
