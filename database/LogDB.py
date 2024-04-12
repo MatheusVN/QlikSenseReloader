@@ -67,8 +67,8 @@ class LogDB(BaseDB):
         if len(parts) < 5:
             raise ValueError(f"Invalid file path structure: {file}")
         event = app[0]
-        status = self.__get_status(file)
-        status_code = 'OK' if 'Error:' not in status else 'Error'
+        status_code = self.__get_status(file)
+        status = 'OK' if 'Search index creation completed successfully' in status_code else 'Error'
         date = datetime.strptime(app[1][:8], '%Y%m%d').strftime('%Y-%m-%d')
         appID = file.stem
         path = str(Path(*parts[4:])).replace('\\', '/')
@@ -84,10 +84,12 @@ class LogDB(BaseDB):
                 return line[error_index:].strip()
             elif "Search index creation completed successfully" in line:
                 status_message = "Search index creation completed successfully"
+            elif "User abort (User canceled reload)" in line:
+                status_message = "User abort (User canceled reload)"
         
         return status_message if 'status_message' in locals() else "No message found."
 
-
+    @staticmethod
     def __open_file(file: Path) -> list[str]:
         with open(file, 'r', encoding='utf-8') as f:
             return f.readlines()
