@@ -15,8 +15,8 @@ class QlikConnector:
         self.__max_workers = cores
 
     def execute_qlik(self):
-        with ThreadPoolExecutor(max_workers=self.__max_workers) as executor:
-            executor.map(self.__process_app, self.__apps)
+        for app in self.__apps:
+            self.__process_app(app)
 
     def __process_app(self, app: Path):
         ws = self.__conect_engine()
